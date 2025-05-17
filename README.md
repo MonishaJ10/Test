@@ -188,68 +188,102 @@ public class CsvMergeController {
 }
 http://localhost:8080/download-csv
 ------------------------------------------
-Controller (CSVController.java)
-@RestController
-@RequestMapping("/api/csv")
-public class CSVController {
+CsvMergeService.java
+package com.example.csvmerge.service;
 
-    @Autowired
-    private CSVService csvService;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
 
-    @PostMapping("/merge")
-    public ResponseEntity<Resource> mergeCSV(@RequestParam("files") MultipartFile[] files) throws IOException {
-        List<File> tempFiles = new ArrayList<>();
-        for (MultipartFile multipartFile : files) {
-            File tempFile = File.createTempFile("temp", ".csv");
-            multipartFile.transferTo(tempFile);
-            tempFiles.add(tempFile);
-        }
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
 
-        File outputFile = csvService.mergeCSVFiles(tempFiles);
-
-        InputStreamResource resource = new InputStreamResource(new FileInputStream(outputFile));
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + outputFile.getName())
-                .contentType(MediaType.parseMediaType("text/csv"))
-                .body(resource);
-    }
-}
-
-Service (CSVService.java)
 @Service
-public class CSVService {
+public class CsvMergeService {
 
-    public File mergeCSVFiles(List<File> csvFiles) throws IOException {
-        // Use a fixed location like your Downloads folder or 'uploads' inside the project
-        String outputDirectory = "uploads"; // or give full path like "C:/Users/Monisha/Downloads"
-        String outputFileName = "merged_output.csv";
-        File outputFile = new File(outputDirectory, outputFileName);
+    private final String initialMarginPath = "C:\\Users\\h59606\\Downloads\\Initial_Margin_E0D_20250307.csv";
+    private final String kondorPath = "C:\\Users\\h59606\\Downloads\\KONDORFX.csv";
+    private final String outputPath = "C:\\Users\\h59606\\Downloads\\merged_output.csv";
 
-        // Create directory if it doesn't exist
-        outputFile.getParentFile().mkdirs();
+    public void mergeCsvFiles() throws IOException {
+        List<Map<String, String>> records = new ArrayList<>();
+        Set<String> headersSet = new LinkedHashSet<>();
 
-        try (
-                BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
-                CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT)
-        ) {
-            for (int i = 0; i < csvFiles.size(); i++) {
-                Reader reader = new FileReader(csvFiles.get(i));
-                Iterable<CSVRecord> records = CSVFormat.DEFAULT
-                        .withFirstRecordAsHeader()
-                        .parse(reader);
+        // Read Initial Margin CSV
+        try (Reader reader = Files.newBufferedReader(Paths.get(initialMarginPath));
+             CSVParser csvParser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader)) {
 
-                if (i == 0) {
-                    csvPrinter.printRecord(records.iterator().next().getParser().getHeaderNames());
-                }
-
-                for (CSVRecord record : records) {
-                    csvPrinter.printRecord(record);
-                }
+            for (CSVRecord record : csvParser) {
+                Map<String, String> row = record.toMap();
+                headersSet.addAll(row.keySet());
+                records.add(row);
             }
         }
 
-        return outputFile;
+        // Read Kondor CSV (map and rename specific columns)
+        try (Reader reader = Files.newBufferedReader(Paths.get(kondorPath));
+             CSVParser csvParser = CSVFormat.DEFAULT.parse(reader)) {
+
+            int rowNum = 0;
+            for (CSVRecord record : csvParser) {
+                // Skip header row if any
+                if (rowNum++ == 0 && record.get(0).contains("HEADER")) continue;
+
+                Map<String, String> row = new HashMap<>();
+                row.put("Base Currency", record.get(21));
+                row.put("Call Amount", record.get(20));
+                row.put("Rate", record.get(79));
+                row.put("Type", record.get(30));       // if type = col 31 (index 30)
+                row.put("Nature", record.get(32));     // if nature = col 33 (index 32)
+                row.put("Site Code", record.get(33));  // if site code = col 34 (index 33)
+
+                headersSet.addAll(row.keySet());
+                records.add(row);
+            }
+        }
+
+        // Write merged CSV
+        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(outputPath));
+             CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headersSet.toArray(new String[0])))) {
+
+            for (Map<String, String> row : records) {
+                List<String> rowValues = new ArrayList<>();
+                for (String header : headersSet) {
+                    rowValues.add(row.getOrDefault(header, ""));
+                }
+                csvPrinter.printRecord(rowValues);
+            }
+        }
+    }
+}
+
+CsvMergeController.java
+package com.example.csvmerge.controller;
+
+import com.example.csvmerge.service.CsvMergeService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/csv")
+public class CsvMergeController {
+
+    @Autowired
+    private CsvMergeService csvMergeService;
+
+    @GetMapping("/merge")
+    public String mergeCsv() {
+        try {
+            csvMergeService.mergeCsvFiles();
+            return "CSV files merged successfully!";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error during merge: " + e.getMessage();
+        }
     }
 }
 
