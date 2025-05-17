@@ -187,3 +187,112 @@ public class CsvMergeController {
     }
 }
 http://localhost:8080/download-csv
+------------------------------------------
+
+// CsvMergeApplication.java (Main class) package com.example.csvmerge;
+
+import org.springframework.boot.SpringApplication; import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication public class CsvMergeApplication { public static void main(String[] args) { SpringApplication.run(CsvMergeApplication.class, args); } }
+
+// CsvMergeController.java package com.example.csvmerge.controller;
+
+import com.example.csvmerge.service.CsvMergeService; import org.springframework.beans.factory.annotation.Autowired; import org.springframework.core.io.InputStreamResource; import org.springframework.http.; import org.springframework.web.bind.annotation.;
+
+import java.io.*;
+
+@RestController @RequestMapping("/api/csv") public class CsvMergeController {
+
+@Autowired
+private CsvMergeService csvMergeService;
+
+@GetMapping("/merge")
+public ResponseEntity<InputStreamResource> mergeAndDownloadCsv() {
+    try {
+        File mergedFile = csvMergeService.mergeCsvFiles();
+        InputStreamResource resource = new InputStreamResource(new FileInputStream(mergedFile));
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=merged_output.csv");
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .contentLength(mergedFile.length())
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(resource);
+
+    } catch (Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+    }
+}
+
+}
+
+// CsvMergeService.java package com.example.csvmerge.service;
+
+import org.apache.commons.csv.CSVFormat; import org.apache.commons.csv.CSVParser; import org.apache.commons.csv.CSVPrinter; import org.apache.commons.csv.CSVRecord; import org.springframework.stereotype.Service;
+
+import java.io.; import java.nio.charset.StandardCharsets; import java.util.;
+
+@Service public class CsvMergeService {
+
+private final String initialMarginPath = "C:/Users/h59606/Downloads/Initial_Margin_E0D_20250307.csv";
+private final String kondorPath = "C:/Users/h59606/Downloads/KONDORFX.csv";
+
+public File mergeCsvFiles() throws IOException {
+    List<Map<String, String>> records = new ArrayList<>();
+    Set<String> headersSet = new LinkedHashSet<>();
+
+    // Load Initial Margin CSV
+    try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginPath), StandardCharsets.UTF_8)) {
+        CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+        List<String> headers = parser.getHeaderNames();
+        headersSet.addAll(headers);
+        for (CSVRecord record : parser) {
+            Map<String, String> row = new LinkedHashMap<>();
+            for (String header : headers) {
+                row.put(header, record.get(header));
+            }
+            records.add(row);
+        }
+    }
+
+    // Load KONDOR CSV (specific columns only)
+    try (Reader reader = new InputStreamReader(new FileInputStream(kondorPath), StandardCharsets.UTF_8)) {
+        CSVParser parser = CSVFormat.DEFAULT.parse(reader);
+        for (CSVRecord record : parser) {
+            // Skip if row is empty
+            if (record.size() <= 80) continue;
+
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("Type", record.get(20));
+            row.put("Nature", record.get(20));
+            row.put("Site Code", record.get(20));
+            row.put("Call Amount", record.get(21));
+            row.put("Base Currency", record.get(22));
+            row.put("Rate", record.get(80));
+
+            headersSet.addAll(Arrays.asList("Type", "Nature", "Site Code", "Call Amount", "Base Currency", "Rate"));
+            records.add(row);
+        }
+    }
+
+    File outputFile = new File("merged_output.csv");
+
+    try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
+         CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(headersSet.toArray(new String[0])))) {
+
+        for (Map<String, String> row : records) {
+            List<String> rowValues = new ArrayList<>();
+            for (String header : headersSet) {
+                rowValues.add(row.getOrDefault(header, ""));
+            }
+            csvPrinter.printRecord(rowValues);
+        }
+    }
+
+    return outputFile;
+}
+
+}
+
