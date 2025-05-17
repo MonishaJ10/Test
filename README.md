@@ -847,4 +847,117 @@ public class CsvMergeController {
     }
 }
 
-http://localhost:8080/merge?initialMarginPath=/home/user/csv/initial_margin.csv&kondorPath=/home/user/csv/kondor.csv
+_____________________________________________________________________________________________________________________________
+
+package com.example.csvmerge.service;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class CsvMergeService {
+
+    // New method using file paths
+    public void mergeCsvFromLocalFiles(String filePath1, String filePath2, String outputPath) throws IOException {
+        Reader reader1 = Files.newBufferedReader(Paths.get(filePath1));
+        Reader reader2 = Files.newBufferedReader(Paths.get(filePath2));
+
+        Iterable<CSVRecord> records1 = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader1);
+        Iterable<CSVRecord> records2 = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader2);
+
+        List<String> headers1 = new ArrayList<>(records1.iterator().next().toMap().keySet());
+        List<String> headers2 = new ArrayList<>(records2.iterator().next().toMap().keySet());
+
+        // Get kondor specific column names by index (fixed positions)
+        List<String> kondorHeaderList = new ArrayList<>(headers2);
+        String kondorCallAmountCol = kondorHeaderList.get(20); // Column 21
+        String kondorBaseCurrencyCol = kondorHeaderList.get(21); // Column 22
+        String kondorRateCol = kondorHeaderList.get(79); // Column 80
+
+        // Merge headers
+        Set<String> allHeaders = new LinkedHashSet<>(headers1);
+        allHeaders.addAll(headers2);
+        allHeaders.add("Type Nature");
+        allHeaders.add("Site Code");
+        allHeaders.add("Call Amount");
+        allHeaders.add("Base Currency");
+        allHeaders.add("Rate");
+
+        // Remove original kondor-specific duplicate headers
+        allHeaders = allHeaders.stream()
+                .filter(h -> !h.equals(kondorCallAmountCol)
+                          && !h.equals(kondorBaseCurrencyCol)
+                          && !h.equals(kondorRateCol))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        // Prepare output writer
+        try (
+            BufferedWriter writer = Files.newBufferedWriter(Paths.get(outputPath));
+            CSVPrinter csvPrinter = new CSVPrinter(writer, CSVFormat.DEFAULT.builder()
+                        .setHeader(allHeaders.toArray(new String[0]))
+                        .build())
+        ) {
+            // Write initial margin records
+            for (CSVRecord record : records1) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (String header : allHeaders) {
+                    row.put(header, record.isMapped(header) ? record.get(header) : null);
+                }
+                row.put("Type Nature", "OP");
+                row.put("Site Code", "3428");
+                row.put("Call Amount", record.get("Call Amount"));
+                row.put("Base Currency", record.get("Base Currency"));
+                row.put("Rate", record.get("Rate"));
+
+                csvPrinter.printRecord(row.values());
+            }
+
+            // Write kondor records
+            for (CSVRecord record : records2) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (String header : allHeaders) {
+                    row.put(header, record.isMapped(header) ? record.get(header) : null);
+                }
+                row.put("Type Nature", record.get("Type Nature"));
+                row.put("Site Code", record.get("Site Code"));
+                row.put("Call Amount", record.get(kondorCallAmountCol));
+                row.put("Base Currency", record.get(kondorBaseCurrencyCol));
+                row.put("Rate", record.get(kondorRateCol));
+
+                csvPrinter.printRecord(row.values());
+            }
+        }
+
+        System.out.println("Merged CSV saved to: " + outputPath);
+    }
+}
+
+
+
+
+
+package com.example.csvmerge;
+
+public class CsvTest {
+    public static void main(String[] args) {
+        CsvMergeService service = new CsvMergeService();
+        try {
+            service.mergeCsvFromLocalFiles(
+                "C:/Users/YourName/Documents/initial_margin.csv",
+                "C:/Users/YourName/Documents/kondor.csv",
+                "C:/Users/YourName/Documents/output/merged_result.csv"
+            );
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
