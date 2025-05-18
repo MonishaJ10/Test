@@ -324,3 +324,19 @@ Copy
 Edit
 http://localhost:8080/download-merged
 It will trigger a download of merged_output.csv.
+
+
+CsvMergeApplication.java
+package com.example.csvmerge;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class CsvMergeApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(CsvMergeApplication.class, args);
+    }
+}
+
