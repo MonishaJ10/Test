@@ -359,3 +359,99 @@ Edit
 Go to:
 http://localhost:8080/download-merged
 The merged CSV will automatically be downloaded.
+
+
+package com.example.csvmerge.service;
+
+import org.apache.commons.csv.*;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+@Service
+public class CsvMergeService {
+
+    public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
+        List<Map<String, String>> mergedRecords = new ArrayList<>();
+        Set<String> headerSet = new LinkedHashSet<>();
+
+        // --- Read Initial Margin File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            List<String> headers = new ArrayList<>(parser.getHeaderMap().keySet());
+            headerSet.addAll(headers);
+            headerSet.add("Type Nature");
+            headerSet.add("Site Code");
+
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (String header : headers) {
+                    row.put(header, record.get(header));
+                }
+                row.put("Type Nature", "OP");
+                row.put("Site Code", "3428");
+                mergedRecords.add(row);
+            }
+        }
+
+        // --- Read Kondor File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            Map<String, Integer> headerMap = parser.getHeaderMap();
+            List<String> kondorHeaders = new ArrayList<>(headerMap.keySet());
+
+            headerSet.addAll(kondorHeaders);
+            headerSet.add("Call Amount");
+            headerSet.add("Base Currency");
+            headerSet.add("Rate");
+
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
+
+                // Get all existing fields
+                for (String header : kondorHeaders) {
+                    row.put(header, record.get(header));
+                }
+
+                // Safely map custom fields by index
+                row.put("Call Amount", safeGet(record, 20));     // Column 21
+                row.put("Base Currency", safeGet(record, 21));   // Column 22
+                row.put("Rate", safeGet(record, 79));            // Column 80
+
+                mergedRecords.add(row);
+            }
+        }
+
+        // --- Write Final Output File ---
+        File outputFile = new File("C:/your/path/merged_output.csv");
+
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT
+                     .builder()
+                     .setHeader(headerSet.toArray(new String[0]))
+                     .build())) {
+
+            for (Map<String, String> row : mergedRecords) {
+                List<String> rowValues = new ArrayList<>();
+                for (String header : headerSet) {
+                    rowValues.add(row.getOrDefault(header, ""));
+                }
+                printer.printRecord(rowValues);
+            }
+        }
+
+        return outputFile;
+    }
+
+    // Safely get by index (to avoid IndexOutOfBoundsException)
+    private String safeGet(CSVRecord record, int index) {
+        try {
+            return record.get(index);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+}
+
