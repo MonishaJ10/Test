@@ -1044,25 +1044,21 @@ public class CsvMergeApplication {
 
 package com.example.csvmerge.service;
 
-import com.example.csvmerge.model.CsvRow;
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.*;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class CsvMergeService {
 
     public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
-        List<CsvRow> mergedRows = new ArrayList<>();
+        List<Map<String, String>> mergedData = new ArrayList<>();
+        Set<String> headerSet = new LinkedHashSet<>();
 
-        // Read Initial Margin File
+        // Process Initial Margin File
         try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
             CSVParser parser = CSVFormat.DEFAULT
                     .builder()
@@ -1072,17 +1068,19 @@ public class CsvMergeService {
                     .parse(reader);
 
             for (CSVRecord record : parser) {
-                CsvRow row = new CsvRow();
-                row.setTypeNature("OP");
-                row.setBaseCurrency(record.get("Base Currency"));
-                row.setSiteCode("3428");
-                row.setCallAmount(record.get("Call Amount"));
-                row.setRate(record.get("Rate"));
-                mergedRows.add(row);
+                Map<String, String> row = new LinkedHashMap<>();
+                row.put("Type Nature", "OP");
+                row.put("Site Code", "3428");
+                row.put("Base Currency", record.get("Base Currency"));
+                row.put("Call Amount", record.get("Call Amount"));
+                row.put("Rate", record.get("Rate"));
+
+                headerSet.addAll(row.keySet());
+                mergedData.add(row);
             }
         }
 
-        // Read Kondor File
+        // Process Kondor File
         try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
             CSVParser parser = CSVFormat.DEFAULT
                     .builder()
@@ -1091,36 +1089,80 @@ public class CsvMergeService {
                     .build()
                     .parse(reader);
 
+            Map<String, Integer> headerMap = parser.getHeaderMap();
+
             for (CSVRecord record : parser) {
-                CsvRow row = new CsvRow();
-                row.setTypeNature(record.get("Type Nature"));
-                row.setBaseCurrency(record.get(21)); // column 22 (0-based)
-                row.setSiteCode(record.get("Site Code"));
-                row.setCallAmount(record.get(20));   // column 21 (0-based)
-                row.setRate(record.get(79));         // column 80 (0-based)
-                mergedRows.add(row);
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (String header : headerMap.keySet()) {
+                    String value = record.get(header);
+
+                    // Map specific column names (strings) to expected output headers
+                    if (header.equals("21")) {
+                        row.put("Call Amount", value);
+                        headerSet.add("Call Amount");
+                    } else if (header.equals("22")) {
+                        row.put("Base Currency", value);
+                        headerSet.add("Base Currency");
+                    } else if (header.equals("80")) {
+                        row.put("Rate", value);
+                        headerSet.add("Rate");
+                    } else {
+                        row.put(header, value);
+                        headerSet.add(header);
+                    }
+                }
+
+                mergedData.add(row);
             }
         }
 
-        // Write to new CSV
+        // Write to merged output CSV
         File outputFile = File.createTempFile("merged_output", ".csv");
         try (Writer writer = new FileWriter(outputFile, StandardCharsets.UTF_8);
              CSVPrinter printer = new CSVPrinter(writer,
-                     CSVFormat.DEFAULT.builder()
-                             .setHeader("Type Nature", "Base Currency", "Site Code", "Call Amount", "Rate")
+                     CSVFormat.DEFAULT
+                             .builder()
+                             .setHeader(headerSet.toArray(new String[0]))
                              .build())) {
 
-            for (CsvRow row : mergedRows) {
-                printer.printRecord(
-                        row.getTypeNature(),
-                        row.getBaseCurrency(),
-                        row.getSiteCode(),
-                        row.getCallAmount(),
-                        row.getRate()
-                );
+            for (Map<String, String> row : mergedData) {
+                List<String> rowValues = new ArrayList<>();
+                for (String header : headerSet) {
+                    rowValues.add(row.getOrDefault(header, ""));
+                }
+                printer.printRecord(rowValues);
             }
         }
 
         return outputFile;
+    }
+}
+
+
+csvrow
+package com.example.csvmerge.model;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class CsvRow {
+    private final Map<String, String> fields = new HashMap<>();
+
+    public void set(String columnName, String value) {
+        fields.put(columnName, value);
+    }
+
+    public String get(String columnName) {
+        return fields.getOrDefault(columnName, "");
+    }
+
+    public Map<String, String> getAllFields() {
+        return fields;
+    }
+
+    @Override
+    public String toString() {
+        return fields.toString();
     }
 }
