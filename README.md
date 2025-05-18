@@ -254,112 +254,8 @@ public class CsvMergeController {
         }
     }
 }
-service/CsvMergeService.java
 
-package com.example.csvmerge.service;
-
-import org.apache.commons.csv.*;
-import org.springframework.stereotype.Service;
-
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
-
-@Service
-public class CsvMergeService {
-
-    public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
-        List<Map<String, String>> mergedRecords = new ArrayList<>();
-        Set<String> headerSet = new LinkedHashSet<>();
-
-        // --- Process Initial Margin ---
-        try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
-            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
-            List<String> headers = new ArrayList<>(parser.getHeaderMap().keySet());
-            headerSet.addAll(headers);
-            headerSet.add("Type Nature");
-            headerSet.add("Site Code");
-
-            for (CSVRecord record : parser) {
-                Map<String, String> row = new LinkedHashMap<>();
-                for (String header : headers) {
-                    row.put(header, record.get(header));
-                }
-                row.put("Type Nature", "OP");
-                row.put("Site Code", "3428");
-                mergedRecords.add(row);
-            }
-        }
-
-        // --- Process Kondor ---
-        try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
-            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
-            List<String> kondorHeaders = new ArrayList<>(parser.getHeaderMap().keySet());
-            headerSet.addAll(kondorHeaders);
-
-            // Remove original indexed columns if present
-            headerSet.remove("21");
-            headerSet.remove("22");
-            headerSet.remove("80");
-
-            headerSet.add("Call Amount");   // from col 21
-            headerSet.add("Base Currency"); // from col 22
-            headerSet.add("Rate");          // from col 80
-
-            for (CSVRecord record : parser) {
-                Map<String, String> row = new LinkedHashMap<>();
-                for (String header : kondorHeaders) {
-                    row.put(header, record.get(header));
-                }
-
-                // Replace/override if these fields already exist
-                row.put("Call Amount", record.get(20));     // col index 21
-                row.put("Base Currency", record.get(21));   // col index 22
-                row.put("Rate", record.get(79));            // col index 80
-                mergedRecords.add(row);
-            }
-        }
-
-        // --- Write to Output File ---
-        File outputFile = new File("C:/your/path/merged_output.csv"); // Save in same path
-
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8);
-             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT
-                     .builder()
-                     .setHeader(headerSet.toArray(new String[0]))
-                     .build())) {
-
-            for (Map<String, String> row : mergedRecords) {
-                List<String> rowValues = new ArrayList<>();
-                for (String header : headerSet) {
-                    rowValues.add(row.getOrDefault(header, ""));
-                }
-                printer.printRecord(rowValues);
-            }
-        }
-
-        return outputFile;
-    }
-}
-✅ What to Do
-🔧 Step 1: Replace paths
-
-new File("C:/your/path/initial_margin.csv")
-new File("C:/your/path/kondor.csv")
-with the actual local paths of your files.
-
-🚀 Step 2: Run the Spring Boot app
-Use your IDE (like IntelliJ or VSCode) or run:
-
-bash
-Copy
-Edit
-./mvnw spring-boot:run
-🌐 Step 3: Open browser
-Go to:
-http://localhost:8080/download-merged
-The merged CSV will automatically be downloaded.
-
+CSVSERVICE
 
 package com.example.csvmerge.service;
 
@@ -454,4 +350,5 @@ public class CsvMergeService {
         }
     }
 }
-
+http://localhost:8080/download-merged
+The merged CSV will automatically be downloaded.
