@@ -1042,34 +1042,85 @@ public class CsvMergeApplication {
 
 ✅ Update CsvMergeApplication.java to run on startup:
 
-package com.example.csvmerge;
+package com.example.csvmerge.service;
 
-import com.example.csvmerge.service.CsvMergeService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import com.example.csvmerge.model.CsvRow;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
 
-import java.io.File;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
-@SpringBootApplication
-public class CsvMergeApplication implements CommandLineRunner {
+@Service
+public class CsvMergeService {
 
-    @Autowired
-    private CsvMergeService csvMergeService;
+    public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
+        List<CsvRow> mergedRows = new ArrayList<>();
 
-    public static void main(String[] args) {
-        SpringApplication.run(CsvMergeApplication.class, args);
-    }
+        // Read Initial Margin File
+        try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT
+                    .builder()
+                    .setHeader()
+                    .setSkipHeaderRecord(true)
+                    .build()
+                    .parse(reader);
 
-    @Override
-    public void run(String... args) throws Exception {
-        // 🔽 Give your local file paths here
-        File initial = new File("C:/Users/YourName/Desktop/initial_margin.csv");
-        File kondor = new File("C:/Users/YourName/Desktop/kondor.csv");
+            for (CSVRecord record : parser) {
+                CsvRow row = new CsvRow();
+                row.setTypeNature("OP");
+                row.setBaseCurrency(record.get("Base Currency"));
+                row.setSiteCode("3428");
+                row.setCallAmount(record.get("Call Amount"));
+                row.setRate(record.get("Rate"));
+                mergedRows.add(row);
+            }
+        }
 
-        File merged = csvMergeService.mergeCsvFiles(initial, kondor);
+        // Read Kondor File
+        try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT
+                    .builder()
+                    .setHeader()
+                    .setSkipHeaderRecord(true)
+                    .build()
+                    .parse(reader);
 
-        System.out.println("Merged CSV file generated at: " + merged.getAbsolutePath());
+            for (CSVRecord record : parser) {
+                CsvRow row = new CsvRow();
+                row.setTypeNature(record.get("Type Nature"));
+                row.setBaseCurrency(record.get(21)); // column 22 (0-based)
+                row.setSiteCode(record.get("Site Code"));
+                row.setCallAmount(record.get(20));   // column 21 (0-based)
+                row.setRate(record.get(79));         // column 80 (0-based)
+                mergedRows.add(row);
+            }
+        }
+
+        // Write to new CSV
+        File outputFile = File.createTempFile("merged_output", ".csv");
+        try (Writer writer = new FileWriter(outputFile, StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(writer,
+                     CSVFormat.DEFAULT.builder()
+                             .setHeader("Type Nature", "Base Currency", "Site Code", "Call Amount", "Rate")
+                             .build())) {
+
+            for (CsvRow row : mergedRows) {
+                printer.printRecord(
+                        row.getTypeNature(),
+                        row.getBaseCurrency(),
+                        row.getSiteCode(),
+                        row.getCallAmount(),
+                        row.getRate()
+                );
+            }
+        }
+
+        return outputFile;
     }
 }
