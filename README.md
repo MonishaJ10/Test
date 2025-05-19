@@ -393,3 +393,168 @@ public void viewMergedCsv(HttpServletResponse response) throws Exception {
         out.write(html.toString().getBytes(StandardCharsets.UTF_8));
     }
 }
+
+----------------------------------
+DATA CONNECTION 
+1. MongoSpringBootApp.java
+
+Path: src/main/java/com/example/mongoproject/MongoSpringBootApp.java
+
+package com.example.mongoproject;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class MongoSpringBootApp {
+    public static void main(String[] args) {
+        SpringApplication.run(MongoSpringBootApp.class, args);
+    }
+}
+
+
+---
+
+2. Staralgonew.java
+
+Path: src/main/java/com/example/mongoproject/model/Staralgonew.java
+
+package com.example.mongoproject.model;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+@Document(collection = "Staralgonew")
+public class Staralgonew {
+
+    @Id
+    private String id;
+
+    private String dealId;
+    private String tradeDate;
+    private String valueDate;
+    private String maturityDate;
+    private String legalEntity;
+    private String crdsPartyNo;
+    private String portfolioCode;
+    private String managingLocation;
+    private String secondaryIssue;
+    private String notional;
+    private String isin;
+    private String crdsPartyCode;
+
+    // Getters and setters
+
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
+    public String getDealId() { return dealId; }
+    public void setDealId(String dealId) { this.dealId = dealId; }
+
+    public String getTradeDate() { return tradeDate; }
+    public void setTradeDate(String tradeDate) { this.tradeDate = tradeDate; }
+
+    public String getValueDate() { return valueDate; }
+    public void setValueDate(String valueDate) { this.valueDate = valueDate; }
+
+    public String getMaturityDate() { return maturityDate; }
+    public void setMaturityDate(String maturityDate) { this.maturityDate = maturityDate; }
+
+    public String getLegalEntity() { return legalEntity; }
+    public void setLegalEntity(String legalEntity) { this.legalEntity = legalEntity; }
+
+    public String getCrdsPartyNo() { return crdsPartyNo; }
+    public void setCrdsPartyNo(String crdsPartyNo) { this.crdsPartyNo = crdsPartyNo; }
+
+    public String getPortfolioCode() { return portfolioCode; }
+    public void setPortfolioCode(String portfolioCode) { this.portfolioCode = portfolioCode; }
+
+    public String getManagingLocation() { return managingLocation; }
+    public void setManagingLocation(String managingLocation) { this.managingLocation = managingLocation; }
+
+    public String getSecondaryIssue() { return secondaryIssue; }
+    public void setSecondaryIssue(String secondaryIssue) { this.secondaryIssue = secondaryIssue; }
+
+    public String getNotional() { return notional; }
+    public void setNotional(String notional) { this.notional = notional; }
+
+    public String getIsin() { return isin; }
+    public void setIsin(String isin) { this.isin = isin; }
+
+    public String getCrdsPartyCode() { return crdsPartyCode; }
+    public void setCrdsPartyCode(String crdsPartyCode) { this.crdsPartyCode = crdsPartyCode; }
+}
+
+
+---
+
+3. StaralgonewRepository.java
+
+Path: src/main/java/com/example/mongoproject/repository/StaralgonewRepository.java
+
+package com.example.mongoproject.repository;
+
+import com.example.mongoproject.model.Staralgonew;
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+public interface StaralgonewRepository extends MongoRepository<Staralgonew, String> {
+}
+
+
+---
+
+4. StaralgonewController.java
+
+Path: src/main/java/com/example/mongoproject/controller/StaralgonewController.java
+
+package com.example.mongoproject.controller;
+
+import com.example.mongoproject.model.Staralgonew;
+import com.example.mongoproject.repository.StaralgonewRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class StaralgonewController {
+
+    @Autowired
+    private StaralgonewRepository repository;
+
+    @GetMapping("/staralgonew")
+    public List<Staralgonew> getAll() {
+        return repository.findAll();
+    }
+}
+
+
+---
+
+5. application.properties
+
+Path: src/main/resources/application.properties
+
+spring.data.mongodb.uri=mongodb://eurvli125734.xmp.ne.intra:20100/RECONDEV
+spring.data.mongodb.database=RECONDEV
+server.port=8080
+
+
+---
+
+Now you can:
+
+1. Open a terminal in the project directory.
+
+
+2. Run with: ./mvnw spring-boot:run or mvn spring-boot:run.
+
+
+
+Go to:
+http://localhost:8080/staralgonew
+to see the MongoDB data from the Staralgonew collection.
+
+Let me know if you'd like me to send you this as a .zip file!
+
