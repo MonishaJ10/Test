@@ -352,3 +352,44 @@ public class CsvMergeService {
 }
 http://localhost:8080/download-merged
 The merged CSV will automatically be downloaded.
+
+
+@GetMapping("/view-merged")
+public void viewMergedCsv(HttpServletResponse response) throws Exception {
+    File mergedFile = csvMergeService.mergeCsvFiles(
+            new File("C:/your/path/initial_margin.csv"),
+            new File("C:/your/path/kondor.csv")
+    );
+
+    response.setContentType("text/html;charset=UTF-8");
+
+    try (BufferedReader reader = new BufferedReader(new FileReader(mergedFile));
+         OutputStream out = response.getOutputStream()) {
+
+        StringBuilder html = new StringBuilder();
+        html.append("<html><head><title>Merged CSV</title>")
+            .append("<style>table { border-collapse: collapse; width: 100%; }")
+            .append("th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }</style>")
+            .append("</head><body><h2>Merged CSV Data</h2><table>");
+
+        String line;
+        boolean isHeader = true;
+
+        while ((line = reader.readLine()) != null) {
+            html.append("<tr>");
+            String[] cells = line.split(",", -1);
+            for (String cell : cells) {
+                if (isHeader) {
+                    html.append("<th>").append(cell).append("</th>");
+                } else {
+                    html.append("<td>").append(cell).append("</td>");
+                }
+            }
+            html.append("</tr>");
+            isHeader = false;
+        }
+
+        html.append("</table></body></html>");
+        out.write(html.toString().getBytes(StandardCharsets.UTF_8));
+    }
+}
