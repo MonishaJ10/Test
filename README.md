@@ -510,6 +510,126 @@ public class CsvMergeService {
         }
     }
 }
+
+
+updated 2
+import org.apache.commons.csv.*;
+import org.springframework.stereotype.Service;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+@Service
+public class CsvMergeService {
+
+    public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
+        List<Map<String, String>> mergedRecords = new ArrayList<>();
+        Set<String> headerSet = new LinkedHashSet<>();
+
+        // --- Read Initial Margin File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            List<String> headers = new ArrayList<>(parser.getHeaderMap().keySet());
+
+            headerSet.addAll(headers);
+            headerSet.add("Type Nature");
+            headerSet.add("Site Code");
+
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (String header : headers) {
+                    if (header.equalsIgnoreCase("Call Amount") ||
+                        header.equalsIgnoreCase("Base Currency") ||
+                        header.equalsIgnoreCase("Rate")) {
+                        continue;
+                    }
+                    row.put(header, record.get(header));
+                }
+                row.put("Call Amount", record.get("Call Amount"));
+                row.put("Base Currency", record.get("Base Currency"));
+                row.put("Rate", record.get("Rate"));
+                row.put("Type Nature", "OP");
+                row.put("Site Code", "3428");
+
+                mergedRecords.add(row);
+            }
+        }
+
+        // --- Read Kondor File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            List<String> kondorHeaders = new ArrayList<>(parser.getHeaderMap().keySet());
+
+            // Add headers except 16, 17, 38 (merged into existing)
+            for (int i = 0; i < kondorHeaders.size(); i++) {
+                if (i != 16 && i != 17 && i != 38 &&
+                    !kondorHeaders.get(i).equalsIgnoreCase("Call Amount") &&
+                    !kondorHeaders.get(i).equalsIgnoreCase("Base Currency") &&
+                    !kondorHeaders.get(i).equalsIgnoreCase("Rate")) {
+                    headerSet.add(kondorHeaders.get(i));
+                }
+            }
+
+            headerSet.add("Call Amount");
+            headerSet.add("Base Currency");
+            headerSet.add("Rate");
+
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
+
+                for (int i = 0; i < record.size(); i++) {
+                    if (i == 16 || i == 17 || i == 38) {
+                        continue;
+                    }
+
+                    String header = i < kondorHeaders.size() ? kondorHeaders.get(i) : "Column" + i;
+
+                    if (!header.equalsIgnoreCase("Call Amount") &&
+                        !header.equalsIgnoreCase("Base Currency") &&
+                        !header.equalsIgnoreCase("Rate")) {
+                        row.put(header, record.get(i));
+                    }
+                }
+
+                // Merge values from indices into corresponding fields
+                row.put("Call Amount", safeGet(record, 16));
+                row.put("Base Currency", safeGet(record, 17));
+                row.put("Rate", safeGet(record, 38));
+
+                mergedRecords.add(row);
+            }
+        }
+
+        // --- Write to Output File ---
+        File outputFile = new File("C:/your/path/merged_output.csv");
+
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT
+                     .builder()
+                     .setHeader(headerSet.toArray(new String[0]))
+                     .build())) {
+
+            for (Map<String, String> row : mergedRecords) {
+                List<String> rowValues = new ArrayList<>();
+                for (String header : headerSet) {
+                    rowValues.add(row.getOrDefault(header, ""));
+                }
+                printer.printRecord(rowValues);
+            }
+        }
+
+        return outputFile;
+    }
+
+    private String safeGet(CSVRecord record, int index) {
+        try {
+            return record.get(index);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+}
 ----------------------------------
 DATA CONNECTION 
 1. MongoSpringBootApp.java
