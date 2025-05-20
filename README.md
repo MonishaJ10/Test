@@ -394,6 +394,110 @@ public void viewMergedCsv(HttpServletResponse response) throws Exception {
     }
 }
 
+
+updated 
+
+package com.example.csvmerge.service;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVPrinter;
+import org.apache.commons.csv.CSVRecord;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+@Service
+public class CsvMergeService {
+
+    public ByteArrayInputStream mergeCsvFiles(MultipartFile initialMarginFile, MultipartFile kondorFile) throws IOException {
+        List<Map<String, String>> mergedRecords = new ArrayList<>();
+        Set<String> headerSet = new LinkedHashSet<>();
+
+        // Parse Initial Margin file
+        CSVParser initialMarginParser = CSVParser.parse(
+                new InputStreamReader(initialMarginFile.getInputStream(), StandardCharsets.UTF_8),
+                CSVFormat.DEFAULT.withFirstRecordAsHeader()
+        );
+        List<String> initialMarginHeaders = initialMarginParser.getHeaderNames();
+        headerSet.addAll(initialMarginHeaders);
+
+        for (CSVRecord record : initialMarginParser) {
+            Map<String, String> row = new LinkedHashMap<>();
+            for (String header : initialMarginHeaders) {
+                row.put(header, record.get(header));
+            }
+            mergedRecords.add(row);
+        }
+
+        // Parse Kondor file
+        CSVParser kondorParser = CSVParser.parse(
+                new InputStreamReader(kondorFile.getInputStream(), StandardCharsets.UTF_8),
+                CSVFormat.DEFAULT.withFirstRecordAsHeader()
+        );
+        List<String> kondorHeaders = kondorParser.getHeaderNames();
+
+        // Remove headers for columns 21, 22, and 80 (index 20, 21, 79) to avoid duplication
+        List<String> filteredKondorHeaders = new ArrayList<>();
+        for (int i = 0; i < kondorHeaders.size(); i++) {
+            if (i != 20 && i != 21 && i != 79) {
+                filteredKondorHeaders.add(kondorHeaders.get(i));
+            }
+        }
+
+        headerSet.addAll(filteredKondorHeaders);
+
+        // Add Initial Margin-specific headers once
+        headerSet.add("Call Amount");
+        headerSet.add("Base Currency");
+        headerSet.add("Rate");
+
+        for (CSVRecord record : kondorParser) {
+            Map<String, String> row = new LinkedHashMap<>();
+
+            // Add only filtered fields
+            for (int i = 0; i < kondorHeaders.size(); i++) {
+                if (i != 20 && i != 21 && i != 79) {
+                    String header = kondorHeaders.get(i);
+                    row.put(header, record.get(header));
+                }
+            }
+
+            // Add Initial Margin field names and their corresponding Kondor values
+            row.put("Call Amount", safeGet(record, 20));     // Column 21
+            row.put("Base Currency", safeGet(record, 21));   // Column 22
+            row.put("Rate", safeGet(record, 79));            // Column 80
+
+            mergedRecords.add(row);
+        }
+
+        // Write merged CSV
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        CSVPrinter printer = new CSVPrinter(new OutputStreamWriter(out, StandardCharsets.UTF_8),
+                CSVFormat.DEFAULT.withHeader(headerSet.toArray(new String[0])));
+
+        for (Map<String, String> record : mergedRecords) {
+            List<String> row = new ArrayList<>();
+            for (String header : headerSet) {
+                row.add(record.getOrDefault(header, ""));
+            }
+            printer.printRecord(row);
+        }
+        printer.flush();
+        return new ByteArrayInputStream(out.toByteArray());
+    }
+
+    private String safeGet(CSVRecord record, int index) {
+        try {
+            return record.get(index);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+}
 ----------------------------------
 DATA CONNECTION 
 1. MongoSpringBootApp.java
