@@ -399,12 +399,8 @@ updated
 
 package com.example.csvmerge.service;
 
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVPrinter;
-import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.csv.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -413,81 +409,97 @@ import java.util.*;
 @Service
 public class CsvMergeService {
 
-    public ByteArrayInputStream mergeCsvFiles(MultipartFile initialMarginFile, MultipartFile kondorFile) throws IOException {
+    public File mergeCsvFiles(File initialMarginFile, File kondorFile) throws IOException {
         List<Map<String, String>> mergedRecords = new ArrayList<>();
         Set<String> headerSet = new LinkedHashSet<>();
 
-        // Parse Initial Margin file
-        CSVParser initialMarginParser = CSVParser.parse(
-                new InputStreamReader(initialMarginFile.getInputStream(), StandardCharsets.UTF_8),
-                CSVFormat.DEFAULT.withFirstRecordAsHeader()
-        );
-        List<String> initialMarginHeaders = initialMarginParser.getHeaderNames();
-        headerSet.addAll(initialMarginHeaders);
+        // --- Read Initial Margin File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(initialMarginFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            List<String> headers = new ArrayList<>(parser.getHeaderMap().keySet());
 
-        for (CSVRecord record : initialMarginParser) {
-            Map<String, String> row = new LinkedHashMap<>();
-            for (String header : initialMarginHeaders) {
-                row.put(header, record.get(header));
-            }
-            mergedRecords.add(row);
-        }
+            headerSet.addAll(headers);
+            headerSet.add("Type Nature");
+            headerSet.add("Site Code");
 
-        // Parse Kondor file
-        CSVParser kondorParser = CSVParser.parse(
-                new InputStreamReader(kondorFile.getInputStream(), StandardCharsets.UTF_8),
-                CSVFormat.DEFAULT.withFirstRecordAsHeader()
-        );
-        List<String> kondorHeaders = kondorParser.getHeaderNames();
-
-        // Remove headers for columns 21, 22, and 80 (index 20, 21, 79) to avoid duplication
-        List<String> filteredKondorHeaders = new ArrayList<>();
-        for (int i = 0; i < kondorHeaders.size(); i++) {
-            if (i != 20 && i != 21 && i != 79) {
-                filteredKondorHeaders.add(kondorHeaders.get(i));
-            }
-        }
-
-        headerSet.addAll(filteredKondorHeaders);
-
-        // Add Initial Margin-specific headers once
-        headerSet.add("Call Amount");
-        headerSet.add("Base Currency");
-        headerSet.add("Rate");
-
-        for (CSVRecord record : kondorParser) {
-            Map<String, String> row = new LinkedHashMap<>();
-
-            // Add only filtered fields
-            for (int i = 0; i < kondorHeaders.size(); i++) {
-                if (i != 20 && i != 21 && i != 79) {
-                    String header = kondorHeaders.get(i);
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
+                for (String header : headers) {
+                    if (header.equalsIgnoreCase("Call Amount") ||
+                        header.equalsIgnoreCase("Base Currency") ||
+                        header.equalsIgnoreCase("Rate")) {
+                        // Skip to avoid duplication
+                        continue;
+                    }
                     row.put(header, record.get(header));
+                }
+                row.put("Call Amount", record.get("Call Amount"));
+                row.put("Base Currency", record.get("Base Currency"));
+                row.put("Rate", record.get("Rate"));
+                row.put("Type Nature", "OP");
+                row.put("Site Code", "3428");
+
+                mergedRecords.add(row);
+            }
+        }
+
+        // --- Read Kondor File ---
+        try (Reader reader = new InputStreamReader(new FileInputStream(kondorFile), StandardCharsets.UTF_8)) {
+            CSVParser parser = CSVFormat.DEFAULT.withFirstRecordAsHeader().parse(reader);
+            Map<String, Integer> headerMap = parser.getHeaderMap();
+            List<String> kondorHeaders = new ArrayList<>(headerMap.keySet());
+
+            for (String header : kondorHeaders) {
+                if (!header.equalsIgnoreCase("Call Amount") &&
+                    !header.equalsIgnoreCase("Base Currency") &&
+                    !header.equalsIgnoreCase("Rate")) {
+                    headerSet.add(header);
                 }
             }
 
-            // Add Initial Margin field names and their corresponding Kondor values
-            row.put("Call Amount", safeGet(record, 20));     // Column 21
-            row.put("Base Currency", safeGet(record, 21));   // Column 22
-            row.put("Rate", safeGet(record, 79));            // Column 80
+            // Add unified headers
+            headerSet.add("Call Amount");
+            headerSet.add("Base Currency");
+            headerSet.add("Rate");
 
-            mergedRecords.add(row);
-        }
+            for (CSVRecord record : parser) {
+                Map<String, String> row = new LinkedHashMap<>();
 
-        // Write merged CSV
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        CSVPrinter printer = new CSVPrinter(new OutputStreamWriter(out, StandardCharsets.UTF_8),
-                CSVFormat.DEFAULT.withHeader(headerSet.toArray(new String[0])));
+                for (String header : kondorHeaders) {
+                    if (!header.equalsIgnoreCase("Call Amount") &&
+                        !header.equalsIgnoreCase("Base Currency") &&
+                        !header.equalsIgnoreCase("Rate")) {
+                        row.put(header, record.get(header));
+                    }
+                }
 
-        for (Map<String, String> record : mergedRecords) {
-            List<String> row = new ArrayList<>();
-            for (String header : headerSet) {
-                row.add(record.getOrDefault(header, ""));
+                row.put("Call Amount", safeGet(record, 20));     // Column 21
+                row.put("Base Currency", safeGet(record, 21));   // Column 22
+                row.put("Rate", safeGet(record, 79));            // Column 80
+
+                mergedRecords.add(row);
             }
-            printer.printRecord(row);
         }
-        printer.flush();
-        return new ByteArrayInputStream(out.toByteArray());
+
+        // --- Write to Output File ---
+        File outputFile = new File("C:/your/path/merged_output.csv");
+
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8);
+             CSVPrinter printer = new CSVPrinter(writer, CSVFormat.DEFAULT
+                     .builder()
+                     .setHeader(headerSet.toArray(new String[0]))
+                     .build())) {
+
+            for (Map<String, String> row : mergedRecords) {
+                List<String> rowValues = new ArrayList<>();
+                for (String header : headerSet) {
+                    rowValues.add(row.getOrDefault(header, ""));
+                }
+                printer.printRecord(rowValues);
+            }
+        }
+
+        return outputFile;
     }
 
     private String safeGet(CSVRecord record, int index) {
